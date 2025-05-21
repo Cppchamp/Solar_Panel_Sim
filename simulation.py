@@ -1,4 +1,5 @@
 import math
+import random
 import time
 
 import numpy as np
@@ -30,6 +31,46 @@ def get_sun_direction(altitude_deg, azimuth_deg):
     z = math.cos(alt_rad) * math.cos(az_rad)
 
     return [x, y, z]
+
+
+# Camera variables
+camera_yaw = 0.0  # Horizontal rotation (left/right)
+camera_pitch = 20.0  # Vertical rotation (up/down), start slightly above horizon
+mouse_left_down = False
+mouse_x = 0
+mouse_y = 0
+camera_distance = 50  # Distance of camera from origin
+
+
+def mouse(button, state, x, y):
+    global mouse_left_down, mouse_x, mouse_y
+    if button == GLUT_LEFT_BUTTON:
+        if state == GLUT_DOWN:
+            mouse_left_down = True
+            mouse_x = x
+            mouse_y = y
+        elif state == GLUT_UP:
+            mouse_left_down = False
+
+def mouse_motion(x, y):
+    global mouse_left_down, mouse_x, mouse_y, camera_yaw, camera_pitch
+    if mouse_left_down:
+        dx = x - mouse_x
+        dy = y - mouse_y
+
+        # Sensitivity factor for rotation speed
+        sensitivity = 0.3
+
+        camera_yaw -= dx * sensitivity
+        camera_pitch += dy * sensitivity
+
+        # Clamp camera_pitch to avoid flipping (e.g. -89 to 89 degrees)
+        camera_pitch = max(-89, min(89, camera_pitch))
+
+        mouse_x = x
+        mouse_y = y
+
+        glutPostRedisplay()
 
 
 # Sun variables
@@ -71,6 +112,11 @@ tilt_angle = 0
 azimuth_angle = 0
 panel_pos_x = -5
 
+p_in = 0
+p_out = 0
+ipo = 0
+efficiency = 0
+
 
 def get_panel_normal(tilt_deg, azimuth_deg):
     tilt_rad = math.radians(tilt_deg)
@@ -106,7 +152,11 @@ def init_glut():
     glutCreateWindow("Solar Panel Simulation".encode('ascii'))  # Create the window
     glEnable(GL_DEPTH_TEST)
     glEnable(GL_LIGHTING)
+    glEnable(GL_LIGHT0)
+    glLightfv(GL_LIGHT0, GL_POSITION, [1.0, 1.0, 1.0, 0.0])
     glShadeModel(GL_SMOOTH)
+    glutMouseFunc(mouse)
+    glutMotionFunc(mouse_motion)
     glClearColor(1.0, 0.5, 0.0, 1.0)
 
 
@@ -131,6 +181,7 @@ def menu_func(value):
     elif 1000 <= value < 1061:  # Sun Azimuth (0 to 90)
         sun_azimuth = value - 1000
 
+    print(value)
     glutPostRedisplay()  # Force redraw after updating
     return 0  # callback error without it
 
@@ -213,6 +264,158 @@ def draw_field():
     glEnd()
 
     glEnable(GL_LIGHTING)  # Re-enable lighting
+    glPopMatrix()
+
+
+def draw_house():
+    def draw_window_frame(x, y, z, width, height):
+        glColor3f(0.0, 0.0, 0.0)
+        glLineWidth(2.0)
+        glBegin(GL_LINE_LOOP)
+        glVertex3f(x, y, z)
+        glVertex3f(x + width, y, z)
+        glVertex3f(x + width, y + height, z)
+        glVertex3f(x, y + height, z)
+        glEnd()
+
+        glBegin(GL_LINES)
+        glVertex3f(x, y + height / 2, z)
+        glVertex3f(x + width, y + height / 2, z)
+        glVertex3f(x + width / 2, y, z)
+        glVertex3f(x + width / 2, y + height, z)
+        glEnd()
+
+    def draw_window_glass(x, y, z, width, height, alpha=0.4):
+        glEnable(GL_BLEND)
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
+        glColor4f(0.6, 0.8, 1.0, alpha)
+
+        glBegin(GL_QUADS)
+        glVertex3f(x, y, z)
+        glVertex3f(x + width, y, z)
+        glVertex3f(x + width, y + height, z)
+        glVertex3f(x, y + height, z)
+        glEnd()
+        glDisable(GL_BLEND)
+
+    def draw_window_reflection(x, y, z, width, height):
+        glEnable(GL_BLEND)
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
+        glColor4f(1.0, 1.0, 1.0, 0.2)
+        glBegin(GL_TRIANGLES)
+        glVertex3f(x, y + height, z)
+        glVertex3f(x + width * 0.4, y + height, z)
+        glVertex3f(x + width, y + height * 0.4, z)
+        glEnd()
+        glDisable(GL_BLEND)
+
+    glPushMatrix()
+    glTranslatef(25.0, -2.6, -5.0)
+    glScalef(4.0, 4.0, 4.0)
+
+    # House base
+    glColor3f(0.6, 0.3, 0.23)
+    glBegin(GL_QUADS)
+    # Front
+    glVertex3f(-2, 0, 2)
+    glVertex3f(2, 0, 2)
+    glVertex3f(2, 2, 2)
+    glVertex3f(-2, 2, 2)
+    # Back
+    glVertex3f(-2, 0, -2)
+    glVertex3f(2, 0, -2)
+    glVertex3f(2, 2, -2)
+    glVertex3f(-2, 2, -2)
+    # Left
+    glVertex3f(-2, 0, -2)
+    glVertex3f(-2, 0, 2)
+    glVertex3f(-2, 2, 2)
+    glVertex3f(-2, 2, -2)
+    # Right
+    glVertex3f(2, 0, -2)
+    glVertex3f(2, 0, 2)
+    glVertex3f(2, 2, 2)
+    glVertex3f(2, 2, -2)
+    # Bottom
+    glVertex3f(-2, 0, -2)
+    glVertex3f(2, 0, -2)
+    glVertex3f(2, 0, 2)
+    glVertex3f(-2, 0, 2)
+    glEnd()
+
+    # Roof
+    glColor3f(0.3, 0.15, 0.1)
+    glBegin(GL_TRIANGLES)
+    # Front
+    glVertex3f(-2, 2, 2)
+    glVertex3f(2, 2, 2)
+    glVertex3f(0, 3.5, 2)
+    # Back
+    glVertex3f(-2, 2, -2)
+    glVertex3f(2, 2, -2)
+    glVertex3f(0, 3.5, -2)
+    glEnd()
+
+    glBegin(GL_QUADS)
+    # Left roof slope
+    glVertex3f(-2, 2, -2)
+    glVertex3f(-2, 2, 2)
+    glVertex3f(0, 3.5, 2)
+    glVertex3f(0, 3.5, -2)
+    # Right roof slope
+    glVertex3f(2, 2, -2)
+    glVertex3f(2, 2, 2)
+    glVertex3f(0, 3.5, 2)
+    glVertex3f(0, 3.5, -2)
+    glEnd()
+
+    # Door (on front face)
+    glColor3f(0.4, 0.2, 0.0)
+    glBegin(GL_QUADS)
+    glVertex3f(-0.3, 0.0, 2.01)
+    glVertex3f(0.5, 0.0, 2.01)
+    glVertex3f(0.5, 1, 2.01)
+    glVertex3f(-0.3, 1, 2.01)
+    glEnd()
+
+    # Add window to the front
+    draw_window_glass(-1.5, 1.2, 2.01, 1, 0.6)
+    draw_window_frame(-1.5, 1.2, 2.02, 1, 0.6)
+    draw_window_reflection(-1.5, 1.2, 2.03, 1, 0.6)
+
+    draw_window_glass(0.8, 1.2, 2.01, 1, 0.6)
+    draw_window_frame(0.8, 1.2, 2.02, 1, 0.6)
+    draw_window_reflection(0.8, 1.2, 2.03, 1, 0.6)
+
+    glPopMatrix()
+
+
+def draw_grasses():
+    glPushMatrix()
+    glDisable(GL_LIGHTING)
+    glColor3f(0.1, 0.5, 0.1)
+
+    random.seed(45)  # For consistent results; remove if you want different every run
+
+    for i in range(-45, 50, 2):
+        for j in range(-45, 50, 2):
+            if random.random() < 5:  # Sparse distribution
+                x = i + random.uniform(-0.5, 0.5)
+                z = j + random.uniform(-0.5, 0.5)
+                height = random.uniform(0.3, 1.5)
+                angle = random.uniform(-10, 10)
+
+                glPushMatrix()
+                glTranslatef(x, -2.6, z)
+                glRotatef(angle, 0, 0, 1)
+                glBegin(GL_TRIANGLES)
+                glVertex3f(0.0, 0.0, 0.0)
+                glVertex3f(-0.05, height, 0.0)
+                glVertex3f(0.05, height, 0.0)
+                glEnd()
+                glPopMatrix()
+
+    glEnable(GL_LIGHTING)
     glPopMatrix()
 
 
@@ -308,7 +511,7 @@ def draw_text(x, y, text, font=globals()["GLUT_BITMAP_HELVETICA_18"]):
 
 # Display function for GLUT
 def display():
-    global sun_dir, sun_pos_x
+    global efficiency, p_in, p_out, ipo, sun_dir, sun_pos_x
 
     # Calculate the sun's position based only on sun parameters (altitude and azimuth)
     sun_world_pos = np.array(sun_dir) * 20 + np.array([sun_pos_x, 8.0, -10.0])  # Keep sun_pos_x separate
@@ -338,7 +541,13 @@ def display():
 
     glMatrixMode(GL_MODELVIEW)
     glLoadIdentity()
-    gluLookAt(0, 15, 50,  # Camera position
+
+    # Calculate camera position based on spherical coordinates
+    cam_x = camera_distance * math.cos(math.radians(camera_pitch)) * math.sin(math.radians(camera_yaw))
+    cam_y = camera_distance * math.sin(math.radians(camera_pitch))
+    cam_z = camera_distance * math.cos(math.radians(camera_pitch)) * math.cos(math.radians(camera_yaw))
+
+    gluLookAt(cam_x, cam_y, cam_z,  # default values 0, 15, 50,
               0, 0, 0,  # Look at point
               0, 1, 0)  # Up vector
 
@@ -346,13 +555,15 @@ def display():
     glEnable(GL_LIGHTING)
     draw_horizon()
     draw_field()
+    draw_grasses()
     draw_sun()  # Call the function to draw the sun
     draw_solar_panel()  # Call the function to draw the solar panel
+    draw_house()
 
     # Display power and efficiency stats
     glColor3f(1, 1, 1)
-    draw_text(950, 940, f"Sun Angle X: {sun_altitude:.1f}°")
-    draw_text(950, 920, f"Sun Angle Y: {sun_azimuth:.1f}°")
+    draw_text(950, 940, f"Sun Altitude: {sun_altitude:.1f}°")
+    draw_text(950, 920, f"Sun Azimuth: {sun_azimuth:.1f}°")
     draw_text(950, 900, f"Panel Tilt: {tilt_angle:.1f}°")
     draw_text(950, 880, f"Panel Azimuth: {azimuth_angle:.1f}°")
     draw_text(950, 860, f"Efficiency: {efficiency * 100:.1f}%")
