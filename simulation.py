@@ -7,7 +7,6 @@ from OpenGL.GL import *
 from OpenGL.GLU import *
 from OpenGL.GLUT import *
 
-
 def compute_solar_efficiency(panel_normal, sun_direction):
     # Normalize both vectors
     def normalize(v):
@@ -33,6 +32,10 @@ def get_sun_direction(altitude_deg, azimuth_deg):
     return [x, y, z]
 
 
+battery_level = [0.0 for _ in range(5)]
+battery_capacity = 100.0  # Max storage (for simplicity)
+consumption_rate = 0.02   # Power consumed per frame
+
 # Camera variables
 camera_yaw = 0.0  # Horizontal rotation (left/right)
 camera_pitch = 20.0  # Vertical rotation (up/down), start slightly above horizon
@@ -43,7 +46,11 @@ camera_distance = 50  # Distance of camera from origin
 
 
 def mouse(button, state, x, y):
-    global mouse_left_down, mouse_x, mouse_y
+    global mouse_left_down, mouse_x, mouse_y, camera_distance
+
+    mods = glutGetModifiers()
+    shift_pressed = (mods & GLUT_ACTIVE_SHIFT) != 0
+
     if button == GLUT_LEFT_BUTTON:
         if state == GLUT_DOWN:
             mouse_left_down = True
@@ -51,6 +58,18 @@ def mouse(button, state, x, y):
             mouse_y = y
         elif state == GLUT_UP:
             mouse_left_down = False
+
+    elif button in (3, 4) and state == GLUT_DOWN:  # Mouse wheel scroll
+        if shift_pressed:
+            zoom_speed = 1.0
+            if button == 3:  # Scroll up
+                camera_distance -= zoom_speed
+            elif button == 4:  # Scroll down
+                camera_distance += zoom_speed
+
+            camera_distance = max(5.0, min(camera_distance, 100))
+            glutPostRedisplay()
+
 
 def mouse_motion(x, y):
     global mouse_left_down, mouse_x, mouse_y, camera_yaw, camera_pitch
@@ -65,7 +84,7 @@ def mouse_motion(x, y):
         camera_pitch += dy * sensitivity
 
         # Clamp camera_pitch to avoid flipping (e.g. -89 to 89 degrees)
-        camera_pitch = max(-89, min(89, camera_pitch))
+        camera_pitch = max(-89, min(89, int(camera_pitch)))
 
         mouse_x = x
         mouse_y = y
@@ -102,10 +121,6 @@ else:
 # Convert to degrees
 sun_altitude = math.degrees(altitude)  # Sun's tilt angle above the horizon
 sun_azimuth = math.degrees(azimuth)  # Sun's direction along the horizon
-
-# Display sun angles for debugging
-print(f"Sun's altitude: {sun_altitude}°")
-print(f"Sun's azimuth: {sun_azimuth}°")
 
 # Panel variables
 tilt_angle = 0
@@ -153,7 +168,11 @@ def init_glut():
     glEnable(GL_DEPTH_TEST)
     glEnable(GL_LIGHTING)
     glEnable(GL_LIGHT0)
-    glLightfv(GL_LIGHT0, GL_POSITION, [1.0, 1.0, 1.0, 0.0])
+    glEnable(GL_COLOR_MATERIAL)
+    glColorMaterial(GL_FRONT_AND_BACK, GL_AMBIENT_AND_DIFFUSE)
+    #glLightfv(GL_LIGHT0, GL_POSITION, [1.0, 1.0, 1.0, 0.0])
+    light_pos = [10.0, 10.0, 10.0, 0.0]
+    glLightfv(GL_LIGHT0, GL_POSITION, light_pos)
     glShadeModel(GL_SMOOTH)
     glutMouseFunc(mouse)
     glutMotionFunc(mouse_motion)
@@ -181,7 +200,6 @@ def menu_func(value):
     elif 1000 <= value < 1061:  # Sun Azimuth (0 to 90)
         sun_azimuth = value - 1000
 
-    print(value)
     glutPostRedisplay()  # Force redraw after updating
     return 0  # callback error without it
 
@@ -390,6 +408,85 @@ def draw_house():
     glPopMatrix()
 
 
+def draw_cube(w, h, d):
+    glPushMatrix()
+    glScalef(w, h, d)
+    glutSolidCube(1.0)
+    glPopMatrix()
+
+
+def draw_outline(w, h, d):
+    glPushMatrix()
+    glScalef(w, h, d)
+    glColor3f(0, 0, 0)
+    glutWireCube(1.001)
+    glPopMatrix()
+
+
+def draw_battery_bank(battery_levels, max_capacity):
+
+    def draw_battery_3d(bat_level, capacity):
+        width = 2
+        depth = 3
+        height_max = 3.0
+        num_cells = 6  # number of visual cells
+
+        charge_ratio = bat_level / capacity
+        height = max(0.01, charge_ratio * height_max)
+
+        # --- Draw battery outer container ---
+        glPushMatrix()
+        glColor3f(0.3, 0.3, 0.1)  # metallic grey
+        draw_cube(width, height_max, depth)
+        draw_outline(width, height_max, depth)
+        glPopMatrix()
+
+        # --- Cell fill properties ---
+        cell_height = height_max / num_cells
+        inner_width = width - 0.2
+        inner_depth = depth - 0.2
+
+        for i in range(num_cells):
+            # Y position of current cell center
+            cell_center_y = -height_max / 2 + (i + 0.5) * cell_height
+
+            # Determine how full this cell is
+            cell_fill_ratio = (charge_ratio * num_cells) - i
+            cell_fill_ratio = max(0.0, min(cell_fill_ratio, 1.0))
+
+            if cell_fill_ratio <= 0.0:
+                continue  # skip empty cells
+
+            # Set color based on overall charge level
+            if charge_ratio > 0.6:
+                glColor3f(0.0, 0.8, 0.0)  # green
+            elif charge_ratio > 0.3:
+                glColor3f(0.9, 0.9, 0.0)  # yellow
+            else:
+                glColor3f(0.9, 0.0, 0.0)  # red
+
+            # --- Draw filled part of the cell ---
+            glPushMatrix()
+            glTranslatef(0, cell_center_y - (1 - cell_fill_ratio) * cell_height / 2, 0.2)
+            draw_cube(inner_width, cell_height * cell_fill_ratio - 0.05, inner_depth)
+            glPopMatrix()
+
+    start_x = 2.0  # starting X position
+    spacing = 2.5 # space between batteries
+
+    glPushMatrix()
+    glTranslatef(15.0, -1.0, -13.0)  # Position the whole bank
+    glRotatef(-90, 0.0, 1.0, 0.0)  # Rotate around Y axis
+
+    for i, level in enumerate(battery_levels):
+        bat_x = start_x + i * spacing
+        glPushMatrix()
+        glTranslatef(bat_x, 0.0, 0.0)
+        draw_battery_3d(level , max_capacity)
+        glPopMatrix()
+    glPopMatrix()
+
+
 def draw_grasses():
     glPushMatrix()
     glDisable(GL_LIGHTING)
@@ -442,6 +539,51 @@ def draw_horizon():
 
 
 def draw_solar_panel():
+
+    def draw_inverter():
+        inverter_x = panel_pos_x  # same X as panel
+        inverter_y = -0.8  # a bit below panel center
+        inverter_z = 0.2  # behind the pole
+
+        glPushMatrix()
+        glTranslatef(inverter_x, inverter_y, inverter_z)
+
+        # Main inverter body - light gray box
+        glColor3f(0.6, 0.6, 0.6)
+        glPushMatrix()
+        glScalef(1.0, 0.50, 0.20)
+        glutSolidCube(1.0)
+        glPopMatrix()
+
+        # Front display panel - dark rectangle
+        glColor3f(0.1, 0.1, 0.1)
+        glPushMatrix()
+        glTranslatef(0, 0.05, 0.085)  # slightly in front
+        glScalef(0.6, 0.3, 0.04)
+        glutSolidCube(1.0)
+        glPopMatrix()
+
+        # Vents - thin horizontal lines on front below display
+        glColor3f(0.3, 0.3, 0.3)
+        for i in range(-2, 3):
+            glPushMatrix()
+            glTranslatef(0, -0.05 + i * 0.03, 0.086)
+            glScalef(0.70, 0.02, 0.04)
+            glutSolidCube(1.0)
+            glPopMatrix()
+
+        # Indicator lights - small colored spheres
+        light_positions = [(-0.15, 0.15, 0.086), (0.0, 0.15, 0.086), (0.15, 0.15, 0.086)]
+        light_colors = [(1.0, 0.0, 0.0), (1.0, 1.0, 0.0), (0.0, 1.0, 0.0)]  # red, yellow, green
+        for pos, color in zip(light_positions, light_colors):
+            glColor3f(*color)
+            glPushMatrix()
+            glTranslatef(*pos)
+            glutSolidSphere(0.03, 12, 12)
+            glPopMatrix()
+
+        glPopMatrix()
+
     global tilt_angle, azimuth_angle, panel_pos_x
 
     glPushMatrix()
@@ -461,6 +603,8 @@ def draw_solar_panel():
     glScalef(0.2, 2.5, 0.2)
     glutSolidCube(1.0)
     glPopMatrix()
+
+    draw_inverter()
 
     # --- Panel rotation around Y-axis (tracking) ---
     glTranslatef(panel_pos_x, 0.0, 0.0)
@@ -503,6 +647,63 @@ def draw_solar_panel():
     glPopMatrix()  # Reset overall
 
 
+def draw_cable(start, end, thickness=0.05):
+
+    dx = end[0] - start[0]
+    dy = end[1] - start[1]
+    dz = end[2] - start[2]
+    length = math.sqrt(dx*dx + dy*dy + dz*dz)
+
+    if length == 0:
+        return  # no cable if same point
+
+    ax = 57.2957795 * math.acos(dz / length)  # angle in degrees
+    if dz < 0:
+        ax = -ax
+    # Cross product for rotation axis
+    rx = -dy * dz
+    ry = dx * dz
+    rz = 0
+
+    glPushMatrix()
+    glTranslatef(*start)
+
+    # If cable is vertical, no rotation needed
+    if dz < length:
+        glRotatef(ax, rx, ry, rz)
+
+    # Draw cylinder along z-axis
+    quad = gluNewQuadric()
+    glColor3f(0.1, 0.1, 0.1)  # cable color: dark gray
+    gluCylinder(quad, thickness, thickness, length, 8, 1)
+    gluDeleteQuadric(quad)
+
+    glPopMatrix()
+
+
+def draw_cables_to_batteries(battery_levels, max_capacity):
+    # Inverter position (matches your draw_inverter inside draw_solar_panel)
+    inverter_pos = (panel_pos_x, -0.8, 0.2)
+
+    # Battery bank base and orientation (same as in draw_battery_bank)
+    base_pos = (15.0, -1.0, -13.0)
+    spacing = 2.5
+    start_x = 2.0
+
+    glPushMatrix()
+    glTranslatef(*base_pos)
+    glRotatef(-90, 0, 1, 0)
+
+    # For each battery, compute battery center position and draw cable
+    for i in range(len(battery_levels)):
+        bat_x = start_x + i * spacing
+        # Batteries are at y=0, z=0 in local battery bank coords
+        battery_pos = (bat_x, 0.0, 0.0)
+        draw_cable(inverter_pos, battery_pos)
+
+    glPopMatrix()
+
+
 def draw_text(x, y, text, font=globals()["GLUT_BITMAP_HELVETICA_18"]):
     glWindowPos2f(x, y)
     for ch in text:
@@ -511,7 +712,7 @@ def draw_text(x, y, text, font=globals()["GLUT_BITMAP_HELVETICA_18"]):
 
 # Display function for GLUT
 def display():
-    global efficiency, p_in, p_out, ipo, sun_dir, sun_pos_x
+    global battery_level, battery_capacity, efficiency, p_in, p_out, ipo, sun_dir, sun_pos_x
 
     # Calculate the sun's position based only on sun parameters (altitude and azimuth)
     sun_world_pos = np.array(sun_dir) * 20 + np.array([sun_pos_x, 8.0, -10.0])  # Keep sun_pos_x separate
@@ -539,6 +740,33 @@ def display():
     p_out = eta * p_in  # Power output from panel
     ipo = p_out / (I * A) if I * A != 0 else 0  # Instantaneous power output ratio
 
+    power_generated = efficiency * 0.1  # Shared generation input for now
+
+    for i in range(len(battery_level)):
+        # Random solar efficiency per battery (simulate partial shading or dirt)
+        individual_efficiency = efficiency * random.uniform(0.4, 1.1)  # way more variance
+
+        # Random fluctuation in sunlight power per battery
+        fluctuation = random.uniform(0.05, 0.15)
+
+        # Random chance to *not* receive sunlight (like a passing cloud)
+        if random.random() < 0.1:  # 10% chance of total shadow
+            individual_efficiency = 0.0
+
+        power_generated = individual_efficiency * fluctuation
+
+        # Random consumption (maybe a connected device turns on)
+        random_consumption = random.uniform(0.005, 0.02)
+
+        # Random sudden drain (simulate battery stress or faulty circuit)
+        if random.random() < 0.05:  # 5% chance of extra power loss
+            random_consumption += random.uniform(0.01, 0.05)
+
+        # Apply to battery
+        battery_level[i] += power_generated
+        battery_level[i] -= random_consumption
+        battery_level[i] = max(0.0, min(battery_level[i], battery_capacity))
+
     glMatrixMode(GL_MODELVIEW)
     glLoadIdentity()
 
@@ -556,8 +784,10 @@ def display():
     draw_horizon()
     draw_field()
     draw_grasses()
-    draw_sun()  # Call the function to draw the sun
-    draw_solar_panel()  # Call the function to draw the solar panel
+    draw_sun()
+    draw_solar_panel()
+    draw_battery_bank(battery_level, battery_capacity)
+    draw_cables_to_batteries(battery_level, battery_capacity)
     draw_house()
 
     # Display power and efficiency stats
@@ -569,8 +799,8 @@ def display():
     draw_text(950, 860, f"Efficiency: {efficiency * 100:.1f}%")
     draw_text(950, 840, f"Incident Power: {p_in:.2f} W")
     draw_text(950, 820, f"Output Power: {p_out:.2f} W")
-    draw_text(950, 800, f"Instant Power Output: {ipo * 100:.1f}%")
-
+    average_battery = sum(battery_level) / 5
+    draw_text(950, 800, f"Battery Level: {average_battery:.1f}%")
     glutSwapBuffers()  # Swap buffers to display the rendered scene
 
 
