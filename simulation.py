@@ -7,6 +7,7 @@ from OpenGL.GL import *
 from OpenGL.GLU import *
 from OpenGL.GLUT import *
 
+
 def compute_solar_efficiency(panel_normal, sun_direction):
     # Normalize both vectors
     def normalize(v):
@@ -34,7 +35,7 @@ def get_sun_direction(altitude_deg, azimuth_deg):
 
 battery_level = [0.0 for _ in range(5)]
 battery_capacity = 100.0  # Max storage (for simplicity)
-consumption_rate = 0.02   # Power consumed per frame
+consumption_rate = 0.02  # Power consumed per frame
 
 # Camera variables
 camera_yaw = 0.0  # Horizontal rotation (left/right)
@@ -126,6 +127,7 @@ sun_azimuth = math.degrees(azimuth)  # Sun's direction along the horizon
 tilt_angle = 0
 azimuth_angle = 0
 panel_pos_x = -5
+battery_enabled = True
 
 p_in = 0
 p_out = 0
@@ -170,7 +172,7 @@ def init_glut():
     glEnable(GL_LIGHT0)
     glEnable(GL_COLOR_MATERIAL)
     glColorMaterial(GL_FRONT_AND_BACK, GL_AMBIENT_AND_DIFFUSE)
-    #glLightfv(GL_LIGHT0, GL_POSITION, [1.0, 1.0, 1.0, 0.0])
+    # glLightfv(GL_LIGHT0, GL_POSITION, [1.0, 1.0, 1.0, 0.0])
     light_pos = [10.0, 10.0, 10.0, 0.0]
     glLightfv(GL_LIGHT0, GL_POSITION, light_pos)
     glShadeModel(GL_SMOOTH)
@@ -424,7 +426,6 @@ def draw_outline(w, h, d):
 
 
 def draw_battery_bank(battery_levels, max_capacity):
-
     def draw_battery_3d(bat_level, capacity):
         width = 2
         depth = 3
@@ -458,6 +459,7 @@ def draw_battery_bank(battery_levels, max_capacity):
                 continue  # skip empty cells
 
             # Set color based on overall charge level
+
             if charge_ratio > 0.6:
                 glColor3f(0.0, 0.8, 0.0)  # green
             elif charge_ratio > 0.3:
@@ -472,7 +474,7 @@ def draw_battery_bank(battery_levels, max_capacity):
             glPopMatrix()
 
     start_x = 2.0  # starting X position
-    spacing = 2.5 # space between batteries
+    spacing = 2.5  # space between batteries
 
     glPushMatrix()
     glTranslatef(15.0, -1.0, -13.0)  # Position the whole bank
@@ -482,7 +484,7 @@ def draw_battery_bank(battery_levels, max_capacity):
         bat_x = start_x + i * spacing
         glPushMatrix()
         glTranslatef(bat_x, 0.0, 0.0)
-        draw_battery_3d(level , max_capacity)
+        draw_battery_3d(level, max_capacity)
         glPopMatrix()
     glPopMatrix()
 
@@ -516,6 +518,76 @@ def draw_grasses():
     glPopMatrix()
 
 
+def draw_cloud(x, y, z, scale=1.0):
+    glPushMatrix()
+    glTranslatef(x, y, z)
+    glScalef(scale, scale, scale)
+
+    glEnable(GL_BLEND)
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
+
+    # Soft blueish white with semi-transparency
+    colors = [
+        [0.8, 0.85, 1.0, 0.5],  # light pastel blue
+        [0.75, 0.8, 0.95, 0.45],  # slightly darker blue
+        [0.7, 0.78, 0.9, 0.45],  # more saturated blue
+        [0.75, 0.82, 0.92, 0.4],
+        [0.78, 0.83, 0.97, 0.4],
+        [0.72, 0.8, 0.95, 0.35],
+    ]
+
+    positions = [
+        (0.0, 0.0, 0.0),
+        (0.8, 0.2, 0.0),
+        (-0.8, 0.2, 0.0),
+        (0.3, 0.5, 0.3),
+        (-0.3, 0.5, -0.3),
+        (0.0, 0.3, -0.5),
+    ]
+
+    for pos, col in zip(positions, colors):
+        glPushMatrix()
+        glTranslatef(*pos)
+        glColor4f(*col)
+        glutSolidSphere(1.0, 40, 40)
+        glPopMatrix()
+
+    glDisable(GL_BLEND)
+    glPopMatrix()
+
+
+def draw_sky_with_clouds():
+
+    # Draw clouds at different positions and sizes
+    draw_cloud(5, 20, -5, 1.5)
+    draw_cloud(-7, 19, -12, 1.2)
+    draw_cloud(0, 17.5, -18, 1.7)
+    draw_cloud(8, 18.5, -20, 1.0)
+    draw_cloud(-10, 21, -7, 1.3)
+    draw_cloud(12, 22, -10, 1.4)
+    draw_cloud(-3, 18, -15, 1.6)
+    draw_cloud(4, 21, -13, 1.1)
+    draw_cloud(-6, 20.5, -5, 1.2)
+    draw_cloud(10, 19, -18, 1.3)
+
+    draw_cloud(-15, 21, -25, 1.4)
+    draw_cloud(-10, 22, -20, 1.3)
+    draw_cloud(-5, 19.5, -18, 1.5)
+    draw_cloud(0, 20, -15, 1.6)
+    draw_cloud(5, 21, -12, 1.4)
+    draw_cloud(10, 19.8, -10, 1.3)
+    draw_cloud(15, 20.5, -8, 1.5)
+
+    draw_cloud(-12, 18, -22, 1.2)
+    draw_cloud(-7, 19, -17, 1.3)
+    draw_cloud(-2, 21, -14, 1.7)
+    draw_cloud(3, 18.5, -11, 1.1)
+    draw_cloud(8, 19.5, -9, 1.4)
+    draw_cloud(13, 20, -6, 1.2)
+    draw_cloud(18, 19.7, -4, 1.3)
+    draw_cloud(22, 20.3, -2, 1.5)
+
+
 def draw_horizon():
     glPushMatrix()
     glDisable(GL_LIGHTING)
@@ -539,7 +611,6 @@ def draw_horizon():
 
 
 def draw_solar_panel():
-
     def draw_inverter():
         inverter_x = panel_pos_x  # same X as panel
         inverter_y = -0.8  # a bit below panel center
@@ -648,11 +719,10 @@ def draw_solar_panel():
 
 
 def draw_cable(start, end, thickness=0.05):
-
     dx = end[0] - start[0]
     dy = end[1] - start[1]
     dz = end[2] - start[2]
-    length = math.sqrt(dx*dx + dy*dy + dz*dz)
+    length = math.sqrt(dx * dx + dy * dy + dz * dz)
 
     if length == 0:
         return  # no cable if same point
@@ -742,30 +812,31 @@ def display():
 
     power_generated = efficiency * 0.1  # Shared generation input for now
 
-    for i in range(len(battery_level)):
-        # Random solar efficiency per battery (simulate partial shading or dirt)
-        individual_efficiency = efficiency * random.uniform(0.4, 1.1)  # way more variance
+    if battery_enabled:
+        for i in range(len(battery_level)):
+            # Random solar efficiency per battery (simulate partial shading or dirt)
+            individual_efficiency = efficiency * random.uniform(0.4, 1.1)  # way more variance
 
-        # Random fluctuation in sunlight power per battery
-        fluctuation = random.uniform(0.05, 0.15)
+            # Random fluctuation in sunlight power per battery
+            fluctuation = random.uniform(0.05, 0.15)
 
-        # Random chance to *not* receive sunlight (like a passing cloud)
-        if random.random() < 0.1:  # 10% chance of total shadow
-            individual_efficiency = 0.0
+            # Random chance to *not* receive sunlight (like a passing cloud)
+            if random.random() < 0.1:  # 10% chance of total shadow
+                individual_efficiency = 0.0
 
-        power_generated = individual_efficiency * fluctuation
+            power_generated = individual_efficiency * fluctuation
 
-        # Random consumption (maybe a connected device turns on)
-        random_consumption = random.uniform(0.005, 0.02)
+            # Random consumption (maybe a connected device turns on)
+            random_consumption = random.uniform(0.005, 0.02)
 
-        # Random sudden drain (simulate battery stress or faulty circuit)
-        if random.random() < 0.05:  # 5% chance of extra power loss
-            random_consumption += random.uniform(0.01, 0.05)
+            # Random sudden drain (simulate battery stress or faulty circuit)
+            if random.random() < 0.05:  # 5% chance of extra power loss
+                random_consumption += random.uniform(0.01, 0.05)
 
-        # Apply to battery
-        battery_level[i] += power_generated
-        battery_level[i] -= random_consumption
-        battery_level[i] = max(0.0, min(battery_level[i], battery_capacity))
+            # Apply to battery
+            battery_level[i] += power_generated
+            battery_level[i] -= random_consumption
+            battery_level[i] = max(0.0, min(battery_level[i], battery_capacity))
 
     glMatrixMode(GL_MODELVIEW)
     glLoadIdentity()
@@ -789,6 +860,8 @@ def display():
     draw_battery_bank(battery_level, battery_capacity)
     draw_cables_to_batteries(battery_level, battery_capacity)
     draw_house()
+    draw_sky_with_clouds()
+
 
     # Display power and efficiency stats
     glColor3f(1, 1, 1)
