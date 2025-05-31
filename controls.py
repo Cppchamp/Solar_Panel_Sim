@@ -8,9 +8,42 @@ import simulation
 # Main Window Setup
 # -------------------------
 root = tk.Tk()
+main_canvas = tk.Canvas(root, bg="#fff4e6", highlightthickness=0)
+main_canvas.pack(side="left", fill="both", expand=True)
+
+# --- Add scrollbar ---
+scrollbar = ttk.Scrollbar(root, orient="vertical", command=main_canvas.yview)
+scrollbar.pack(side="right", fill="y")
+
+# --- Configure canvas scrolling ---
+main_canvas.configure(yscrollcommand=scrollbar.set)
+
+# --- Create an interior frame for content ---
+scrollable_frame = ttk.Frame(main_canvas)
+scrollable_frame.bind("<Configure>", lambda e: main_canvas.configure(scrollregion=main_canvas.bbox("all")))
+
+# --- Add the frame to the canvas ---
+window_id = main_canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
+
+
+def _on_mousewheel(event):
+    main_canvas.yview_scroll(-int(event.delta / 120), "units")
+
+
+main_canvas.bind_all("<MouseWheel>", _on_mousewheel)
+
 root.title("🌞 Solar Panel Control Panel")
-root.geometry("600x600")
+root.geometry("600x750")
 root.configure(bg="#fff4e6")  # Soft off-white with warm undertone
+
+
+def on_canvas_configure(event):
+    # Set the scrollable_frame width to match canvas width
+    canvas_width = event.width
+    main_canvas.itemconfig(window_id, width=canvas_width)
+
+
+main_canvas.bind("<Configure>", on_canvas_configure)
 
 # -------------------------
 # Styles
@@ -53,13 +86,14 @@ style.configure("TLabelframe.Label",
 # -------------------------
 # Title
 # -------------------------
-title_label = ttk.Label(root, text="☀️ Solar Panel Controller", font=("Segoe UI", 20, "bold"), anchor="center")
+title_label = ttk.Label(scrollable_frame, text="☀️ Solar Panel Controller", font=("Segoe UI", 20, "bold"),
+                        anchor="center")
 title_label.pack(pady=20)
 
 # -------------------------
 # Control Frame
 # -------------------------
-control_frame = ttk.Frame(root)
+control_frame = ttk.Frame(scrollable_frame)
 control_frame.pack(pady=10)
 
 
@@ -76,7 +110,7 @@ start_button.grid(row=0, column=0, columnspan=2, pady=10, padx=20)
 # -------------------------
 # Stats Frame (Initially Hidden)
 # -------------------------
-stats_frame = ttk.LabelFrame(root, text="📊 Power Output Stats", padding=10)
+stats_frame = ttk.LabelFrame(scrollable_frame, text="📊 Power Output Stats", padding=10)
 stats_labels = {}
 
 stats_data = {
@@ -107,7 +141,7 @@ stats_visible = False
 def update_stats_periodically():
     global stats_visible
     if not stats_visible:
-        stats_frame.pack(pady=20, fill="x", padx=40)
+        stats_frame.pack(after=battery_frame, fill="x", padx=40)
         stats_visible = True
 
     updated_stats = {
@@ -127,13 +161,58 @@ def update_stats_periodically():
 
 
 # --- Show Stats Button ---
-stats_button = ttk.Button(root, text="📈 Show Power Output", command=update_stats_periodically)
+stats_button = ttk.Button(scrollable_frame, text="📈 Show Power Output", command=update_stats_periodically)
 stats_button.pack(pady=10)
+
+# -------------------------
+# Panel Orientation Frame
+# -------------------------
+orientation_frame = ttk.LabelFrame(scrollable_frame, text="📐 Panel Orientation", padding=10)
+orientation_frame.pack(pady=10, fill="x", padx=40)
+
+
+# --- Tilt Angle Slider ---
+def on_tilt_change(val):
+    simulation.tilt_angle = float(val)
+
+
+tilt_slider = tk.Scale(orientation_frame, from_=-90, to=90, orient="horizontal",
+                       label="Tilt Angle (°)", command=on_tilt_change, bg=frame_bg)
+tilt_slider.set(simulation.tilt_angle)
+tilt_slider.pack(fill="x", pady=5)
+
+
+# --- Azimuth Angle Slider ---
+def on_azimuth_change(val):
+    simulation.azimuth_angle = float(val)
+
+
+azimuth_slider = tk.Scale(orientation_frame, from_=-90, to=90, orient="horizontal",
+                          label="Azimuth (°)", command=on_azimuth_change, bg=frame_bg)
+azimuth_slider.set(simulation.azimuth_angle)
+azimuth_slider.pack(fill="x", pady=5)
+
+# -------------------------
+# Battery Control Frame
+# -------------------------
+battery_frame = ttk.LabelFrame(scrollable_frame, text="🔋 Battery Options", padding=10)
+battery_frame.pack(pady=10, fill="x", padx=40)
+
+battery_charging = tk.BooleanVar(value=True)
+
+
+def toggle_battery():
+    simulation.battery_enabled = battery_charging.get()
+
+
+battery_check = ttk.Checkbutton(battery_frame, text="Enable Battery Charging",
+                                variable=battery_charging, command=toggle_battery)
+battery_check.pack(anchor="w", pady=5)
 
 # -------------------------
 # Footer
 # -------------------------
-footer_frame = ttk.Frame(root)
+footer_frame = ttk.Frame(scrollable_frame)
 footer_frame.pack(side="bottom", fill="x", pady=15)
 
 footer_label = ttk.Label(footer_frame, text="• 2025", font=("Segoe UI", 9, "italic"), anchor="center")
