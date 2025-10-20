@@ -21,7 +21,7 @@ Power input/output
 
 Instant power generation
 
-🌅 3D Simulation (OpenGL)
+3D Simulation (OpenGL)
 
 Realistic visualization of:
 
@@ -66,7 +66,7 @@ Run the Control Panel:
 python main.py
 
 
-Click “▶️ Start Simulation” to launch the OpenGL visualization window.
+Click “Start Simulation” to launch the OpenGL visualization window.
 
 Adjust parameters:
 
@@ -76,7 +76,7 @@ Azimuth (°) – rotates the panel horizontally.
 
 Enable Battery Charging – toggles battery charging simulation.
 
-Click “📈 Show Power Output” to display real-time statistics.
+Click “Show Power Output” to display real-time statistics.
 
 Controls (Simulation Window)
 Action	Control
